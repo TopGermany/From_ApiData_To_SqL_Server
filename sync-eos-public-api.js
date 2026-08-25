@@ -55,6 +55,8 @@ const sqlServer = required("SQL_SERVER");
 const sqlDatabase = config.SQL_DATABASE || "Api_Eos_Marketing";
 const pageSize = Number.parseInt(config.API_PAGE_SIZE || "100", 10);
 const topLinksWindow = config.TOP_LINKS_WINDOW || "24h";
+const commandArgs = process.argv.slice(2);
+const topLinksOnly = commandArgs.includes("--top-links-only");
 
 if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
     throw new Error("API_PAGE_SIZE must be an integer between 1 and 100.");
@@ -294,27 +296,29 @@ function runSql(endpoint, sql) {
 }
 
 async function main() {
-    console.log(`EOS sync started at ${startedAt.toISOString()}.`);
+    console.log(`EOS ${topLinksOnly ? "top-links-only " : ""}sync started at ${startedAt.toISOString()}.`);
 
-    const users = await fetchEndpoint("users", {}, 1);
-    const userRows = users.body.data;
-    if (users.body.meta?.total !== undefined && users.body.meta.total !== userRows.length) {
-        throw new Error("users: API capped an unpaginated response; refusing an incomplete load.");
+    if (!topLinksOnly) {
+        const users = await fetchEndpoint("users", {}, 1);
+        const userRows = users.body.data;
+        if (users.body.meta?.total !== undefined && users.body.meta.total !== userRows.length) {
+            throw new Error("users: API capped an unpaginated response; refusing an incomplete load.");
+        }
+        runSql("users", sqlForUsers(userRows, [users.rawFile]));
+        console.log(`users: loaded ${userRows.length} rows.`);
+
+        const pages = await fetchEndpoint("pages", {}, 1);
+        const pageRows = pages.body.data;
+        if (pages.body.meta?.total !== undefined && pages.body.meta.total !== pageRows.length) {
+            throw new Error("pages: API capped an unpaginated response; refusing an incomplete load.");
+        }
+        runSql("pages", sqlForPages(pageRows, [pages.rawFile]));
+        console.log(`pages: loaded ${pageRows.length} rows.`);
+
+        const content = await fetchAll("content-pool");
+        runSql("content-pool", sqlForContentPool(content.rows, content.rawFiles));
+        console.log(`content-pool: loaded ${content.rows.length} rows.`);
     }
-    runSql("users", sqlForUsers(userRows, [users.rawFile]));
-    console.log(`users: loaded ${userRows.length} rows.`);
-
-    const pages = await fetchEndpoint("pages", {}, 1);
-    const pageRows = pages.body.data;
-    if (pages.body.meta?.total !== undefined && pages.body.meta.total !== pageRows.length) {
-        throw new Error("pages: API capped an unpaginated response; refusing an incomplete load.");
-    }
-    runSql("pages", sqlForPages(pageRows, [pages.rawFile]));
-    console.log(`pages: loaded ${pageRows.length} rows.`);
-
-    const content = await fetchAll("content-pool");
-    runSql("content-pool", sqlForContentPool(content.rows, content.rawFiles));
-    console.log(`content-pool: loaded ${content.rows.length} rows.`);
 
     const topLinks = await fetchAll("top-links", { window: topLinksWindow });
     for (const row of topLinks.rows) row.api_last_updated = topLinks.lastUpdated;
