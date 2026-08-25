@@ -57,6 +57,11 @@ const pageSize = Number.parseInt(config.API_PAGE_SIZE || "100", 10);
 const topLinksWindow = config.TOP_LINKS_WINDOW || "24h";
 const commandArgs = process.argv.slice(2);
 const topLinksOnly = commandArgs.includes("--top-links-only");
+const contentPoolOnly = commandArgs.includes("--content-pool-only");
+
+if (topLinksOnly && contentPoolOnly) {
+    throw new Error("Use either --top-links-only or --content-pool-only, not both.");
+}
 
 if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
     throw new Error("API_PAGE_SIZE must be an integer between 1 and 100.");
@@ -296,9 +301,10 @@ function runSql(endpoint, sql) {
 }
 
 async function main() {
-    console.log(`EOS ${topLinksOnly ? "top-links-only " : ""}sync started at ${startedAt.toISOString()}.`);
+    const mode = topLinksOnly ? "top-links-only " : (contentPoolOnly ? "content-pool-only " : "");
+    console.log(`EOS ${mode}sync started at ${startedAt.toISOString()}.`);
 
-    if (!topLinksOnly) {
+    if (!topLinksOnly && !contentPoolOnly) {
         const users = await fetchEndpoint("users", {}, 1);
         const userRows = users.body.data;
         if (users.body.meta?.total !== undefined && users.body.meta.total !== userRows.length) {
@@ -315,15 +321,20 @@ async function main() {
         runSql("pages", sqlForPages(pageRows, [pages.rawFile]));
         console.log(`pages: loaded ${pageRows.length} rows.`);
 
+    }
+
+    if (!topLinksOnly) {
         const content = await fetchAll("content-pool");
         runSql("content-pool", sqlForContentPool(content.rows, content.rawFiles));
         console.log(`content-pool: loaded ${content.rows.length} rows.`);
     }
 
-    const topLinks = await fetchAll("top-links", { window: topLinksWindow });
-    for (const row of topLinks.rows) row.api_last_updated = topLinks.lastUpdated;
-    runSql("top-links", sqlForTopLinks(topLinks.rows, topLinks.rawFiles));
-    console.log(`top-links (${topLinksWindow}): loaded ${topLinks.rows.length} rows.`);
+    if (!contentPoolOnly) {
+        const topLinks = await fetchAll("top-links", { window: topLinksWindow });
+        for (const row of topLinks.rows) row.api_last_updated = topLinks.lastUpdated;
+        runSql("top-links", sqlForTopLinks(topLinks.rows, topLinks.rawFiles));
+        console.log(`top-links (${topLinksWindow}): loaded ${topLinks.rows.length} rows.`);
+    }
     console.log("EOS sync completed successfully.");
 }
 

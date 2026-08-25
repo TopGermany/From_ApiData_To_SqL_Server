@@ -26,6 +26,12 @@ This directory contains a daily, read-only loader for the EOS public API. It sav
    node .\sync-eos-public-api.js --top-links-only
    ```
 
+   To refresh only content-pool manually (without calling users, pages, or top-links), run:
+
+   ```powershell
+   node .\sync-eos-public-api.js --content-pool-only
+   ```
+
    Raw API payloads are stored in `Raw/YYYY-MM-DD/`. The SQL audit table `dbo.api_sync_runs` records successful endpoint loads.
 
 4. After the manual test succeeds, create the daily task (default 01:15 local machine time):
