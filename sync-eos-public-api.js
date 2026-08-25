@@ -222,8 +222,8 @@ USING (
            caption_variants, TRY_CONVERT(DATETIME2(3), created_at, 127) AS created_at
     FROM OPENJSON(@payload) WITH (
         id NVARCHAR(36) '$.id', caption NVARCHAR(MAX) '$.caption', priority NVARCHAR(20) '$.priority',
-        amazon_link NVARCHAR(2048) '$.amazon_link', videos_url NVARCHAR(MAX) '$.videos_url',
-        images_url NVARCHAR(MAX) '$.images_url', caption_variants NVARCHAR(MAX) '$.caption_variants' AS JSON,
+        amazon_link NVARCHAR(2048) '$.amazon_link', videos_url NVARCHAR(MAX) '$.videos_url' AS JSON,
+        images_url NVARCHAR(MAX) '$.images_url' AS JSON, caption_variants NVARCHAR(MAX) '$.caption_variants' AS JSON,
         created_at NVARCHAR(64) '$.created_at'
     )
 ) AS source ON target.id = source.id
