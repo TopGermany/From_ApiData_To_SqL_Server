@@ -36,6 +36,14 @@ This directory contains a daily, read-only loader for the EOS public API. It sav
 
    This task uses the current Windows account and runs while that account is signed in. For an unattended server, register the same `node sync-eos-public-api.js` command under a dedicated service account through Task Scheduler; grant that account network access to `amz.eos.vn` and SQL Server database permissions.
 
+   To refresh only top-links at 09:00 and 21:00 every day instead, use:
+
+   ```powershell
+   .\install-top-links-sync-tasks.ps1
+   ```
+
+   These two tasks run `node sync-eos-public-api.js --top-links-only`, so they do not call the other three endpoints.
+
 ## What is refreshed
 
 - `api_users` and `api_pages`: upserted from the full read-only API response.

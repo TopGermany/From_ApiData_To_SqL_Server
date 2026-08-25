@@ -1,5 +1,6 @@
 .env
 Raw/
+Raw_Threads/
 logs/
 Agent_Logs/
 Agent_Rule/
