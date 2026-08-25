@@ -58,9 +58,14 @@ const topLinksWindow = config.TOP_LINKS_WINDOW || "24h";
 const commandArgs = process.argv.slice(2);
 const topLinksOnly = commandArgs.includes("--top-links-only");
 const contentPoolOnly = commandArgs.includes("--content-pool-only");
+const snapshotSlotOption = commandArgs.find((argument) => argument.startsWith("--snapshot-slot="));
+const requestedSnapshotSlot = snapshotSlotOption?.slice("--snapshot-slot=".length);
 
 if (topLinksOnly && contentPoolOnly) {
     throw new Error("Use either --top-links-only or --content-pool-only, not both.");
+}
+if (requestedSnapshotSlot && !/^([01]\d|2[0-3]):[0-5]\d$/.test(requestedSnapshotSlot)) {
+    throw new Error("--snapshot-slot must use HH:mm in 24-hour time, for example --snapshot-slot=09:00.");
 }
 
 if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
@@ -70,20 +75,31 @@ if (!new Set(["12h", "24h", "3d", "7d", "1m"]).has(topLinksWindow)) {
     throw new Error("TOP_LINKS_WINDOW must be one of: 12h, 24h, 3d, 7d, 1m.");
 }
 
-function vietnamDate() {
+function vietnamDateTimeParts(date = new Date()) {
     const parts = new Intl.DateTimeFormat("en-CA", {
         timeZone: "Asia/Ho_Chi_Minh",
         year: "numeric",
         month: "2-digit",
-        day: "2-digit"
-    }).formatToParts(new Date());
-    const part = Object.fromEntries(parts.filter((p) => p.type !== "literal").map((p) => [p.type, p.value]));
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23"
+    }).formatToParts(date);
+    return Object.fromEntries(parts.filter((p) => p.type !== "literal").map((p) => [p.type, p.value]));
+}
+
+function vietnamDate(date = new Date()) {
+    const part = vietnamDateTimeParts(date);
     return `${part.year}-${part.month}-${part.day}`;
 }
 
 const startedAt = new Date();
+const snapshotSlot = requestedSnapshotSlot || (() => {
+    const part = vietnamDateTimeParts(startedAt);
+    return `${part.hour}:${part.minute}`;
+})();
 const runStamp = startedAt.toISOString().replaceAll(":", "-").replace(".", "-");
-const rawDir = path.join(ROOT, "Raw", vietnamDate());
+const rawDir = path.join(ROOT, "Raw", vietnamDate(startedAt));
 fs.mkdirSync(rawDir, { recursive: true });
 
 function rawFileName(endpoint, page) {
@@ -245,9 +261,10 @@ WHEN NOT MATCHED BY TARGET AND source.id IS NOT NULL THEN
 }
 
 function sqlForTopLinks(rows, rawFiles) {
-    const snapshotDate = vietnamDate();
+    const snapshotDate = vietnamDate(startedAt);
     const operation = `${payloadDeclaration(rows)}
 DECLARE @snapshot_date DATE = '${snapshotDate}';
+DECLARE @snapshot_slot CHAR(5) = '${snapshotSlot}';
 DECLARE @window_name NVARCHAR(10) = N'${topLinksWindow}';
 MERGE dbo.api_top_links_daily AS target
 USING (
@@ -264,7 +281,8 @@ USING (
         social_page_url NVARCHAR(2048) '$.social_page_url', niche NVARCHAR(255) '$.niche',
         created_at NVARCHAR(64) '$.created_at', api_last_updated NVARCHAR(64) '$.api_last_updated'
     )
-) AS source ON target.snapshot_date = @snapshot_date AND target.window_name = @window_name AND target.rank_no = source.rank_no
+) AS source ON target.snapshot_date = @snapshot_date AND target.snapshot_slot = @snapshot_slot
+    AND target.window_name = @window_name AND target.rank_no = source.rank_no
 WHEN MATCHED THEN UPDATE SET clicks = source.clicks, clicks_pct = source.clicks_pct, asin = source.asin,
     short_url = source.short_url, amazon_url = source.amazon_url, product_name = source.product_name,
     amz_image = source.amz_image, owner_id = source.owner_id, owner_name = source.owner_name,
@@ -272,10 +290,10 @@ WHEN MATCHED THEN UPDATE SET clicks = source.clicks, clicks_pct = source.clicks_
     social_page_url = source.social_page_url, niche = source.niche, created_at = source.created_at,
     api_last_updated = source.api_last_updated, snapshot_at = SYSUTCDATETIME()
 WHEN NOT MATCHED BY TARGET AND source.rank_no IS NOT NULL THEN
-    INSERT (snapshot_date, snapshot_at, window_name, rank_no, clicks, clicks_pct, asin, short_url, amazon_url,
+    INSERT (snapshot_date, snapshot_slot, snapshot_at, window_name, rank_no, clicks, clicks_pct, asin, short_url, amazon_url,
         product_name, amz_image, owner_id, owner_name, social_page_id, social_page_name, social_page_url, niche,
         created_at, api_last_updated)
-    VALUES (@snapshot_date, SYSUTCDATETIME(), @window_name, source.rank_no, source.clicks, source.clicks_pct,
+    VALUES (@snapshot_date, @snapshot_slot, SYSUTCDATETIME(), @window_name, source.rank_no, source.clicks, source.clicks_pct,
         source.asin, source.short_url, source.amazon_url, source.product_name, source.amz_image, source.owner_id,
         source.owner_name, source.social_page_id, source.social_page_name, source.social_page_url, source.niche,
         source.created_at, source.api_last_updated);`;

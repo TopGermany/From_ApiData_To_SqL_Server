@@ -18,7 +18,7 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit
 
 foreach ($time in $At | Select-Object -Unique) {
     $taskName = "$TaskNamePrefix $($time.Replace(':', ''))"
-    $action = New-ScheduledTaskAction -Execute $node -Argument ('"{0}" --top-links-only' -f $script) -WorkingDirectory $root
+    $action = New-ScheduledTaskAction -Execute $node -Argument ('"{0}" --top-links-only --snapshot-slot={1}' -f $script, $time) -WorkingDirectory $root
     $trigger = New-ScheduledTaskTrigger -Daily -At $time
 
     Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "EOS top-links (24h) API sync every day at $time." -Force | Out-Null
