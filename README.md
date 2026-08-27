@@ -54,7 +54,7 @@ This directory contains a daily, read-only loader for the EOS public API. It sav
    .\install-top-links-sync-tasks.ps1
    ```
 
-   These two tasks run `node sync-eos-public-api.js --top-links-only --snapshot-slot=HH:mm`, so they do not call the other three endpoints. The 09:00 and 21:00 snapshots are stored separately.
+   These two tasks run `node sync-eos-public-api.js --top-links-only`, so they do not call the other three endpoints. On-time runs are stored as 09:00 and 21:00; a delayed catch-up run uses its actual capture time as the snapshot slot, preserving timestamp accuracy.
 
 ## What is refreshed
 
